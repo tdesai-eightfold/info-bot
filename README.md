@@ -6,7 +6,7 @@
 # Run the server (console mode)
   `uv run server.py console`
 # Run the server (dev mode to use frontend)
-  1. `uv run server.py console` in first terminal
+  1. `uv run server.py dev` in first terminal
   2. `python token-service.py` in another terminal
   3. `lk room create my-room` in third terminal
   4. Open index.html it chrome
