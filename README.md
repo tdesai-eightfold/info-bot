@@ -1,7 +1,7 @@
 # Setup
 1. Go to cap-server directory
 ## Install dependencies
-  1. `uv add "livekit-agents[silero,turn-detector]~=1.3" "livekit-plugins-noise-cancellation~=0.2" "python-dotenv" "pandas"`
+  1. `uv add "livekit-agents[silero,turn-detector]~=1.3" "livekit-plugins-noise-cancellation~=0.2" "python-dotenv" "pandas" "flask"`
   2. `uv run server.py download-files`
   
 # Run the server (console mode)
