@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audio Voice Assistant</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      padding: 40px;
+      max-width: 600px;
+      width: 100%;
+    }
+
+    h1 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 30px;
+      font-size: 28px;
+    }
+
+    .status {
+      text-align: center;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-weight: 500;
+      transition: all 0.3s;
+    }
+
+    .status.connecting {
+      background: #fff3cd;
+      color: #856404;
+    }
+
+    .status.connected {
+      background: #d4edda;
+      color: #155724;
+    }
+
+    .status.error {
+      background: #f8d7da;
+      color: #721c24;
+    }
+
+    .status.disconnected {
+      background: #f8d7da;
+      color: #721c24;
+    }
+
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      margin-bottom: 30px;
+    }
+
+    button {
+      padding: 15px 30px;
+      border: none;
+      border-radius: 50px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    #mic {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    #mic.recording {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.05);
+      }
+    }
+
+    #disconnect {
+      background: #6c757d;
+      color: white;
+    }
+
+    .transcript-container {
+      background: #f8f9fa;
+      border-radius: 12px;
+      padding: 20px;
+      max-height: 400px;
+      overflow-y: auto;
+      margin-top: 20px;
+    }
+
+    .transcript-container h3 {
+      color: #333;
+      margin-bottom: 15px;
+      font-size: 18px;
+    }
+
+    #log {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      max-height: 300px;
+      overflow-y: auto;
+      color: #333;
+    }
+
+    .message {
+      margin-bottom: 10px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      background: #e9ecef;
+    }
+
+    .message.user {
+      background: #cfe2ff;
+      border-left: 4px solid #0d6efd;
+    }
+
+    .message.agent {
+      background: #d1e7dd;
+      border-left: 4px solid #198754;
+    }
+
+    .audio-indicator {
+      text-align: center;
+      margin: 20px 0;
+      font-size: 48px;
+    }
+
+    .audio-indicator.active {
+      animation: bounce 0.6s ease-in-out infinite;
+    }
+
+    @keyframes bounce {
+      0%, 100% {
+        transform: translateY(0);
+      }
+      50% {
+        transform: translateY(-10px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎙️ Voice Assistant</h1>
+    
+    <div id="status" class="status connecting">Connecting...</div>
+    
+    <div class="audio-indicator" id="audioIndicator">🔇</div>
+    
+    <div class="controls">
+      <button id="mic">🎤 Start Listening</button>
+      <button id="disconnect">Disconnect</button>
+    </div>
+
+    <div class="transcript-container">
+      <h3>💬 Conversation</h3>
+      <div id="log"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { Room, RoomEvent, RemoteParticipant, LocalParticipant } from "https://cdn.skypack.dev/livekit-client";
+
+    const statusEl = document.getElementById("status");
+    const logEl = document.getElementById("log");
+    const micBtn = document.getElementById("mic");
+    const disconnectBtn = document.getElementById("disconnect");
+    const audioIndicator = document.getElementById("audioIndicator");
+
+    let room;
+    let micEnabled = false;
+    let isConnected = false;
+    let audioEnabled = false;
+    const audioElements = new Map(); // Store audio elements for tracks
+
+    const updateStatus = (text, className) => {
+      statusEl.textContent = text;
+      statusEl.className = `status ${className}`;
+    };
+
+    // Enable audio playback for all stored audio elements
+    const enableAudioPlayback = async () => {
+      if (audioEnabled) return;
+      
+      audioEnabled = true;
+      for (const [trackId, audioElement] of audioElements.entries()) {
+        try {
+          await audioElement.play();
+          log(`🔊 Audio playback enabled for track ${trackId}`, "info");
+        } catch (err) {
+          log(`⚠️ Could not play audio for track ${trackId}: ${err.message}`, "info");
+        }
+      }
+    };
+
+    const log = (msg, type = "info") => {
+      const messageDiv = document.createElement("div");
+      messageDiv.className = `message ${type}`;
+      messageDiv.textContent = msg;
+      logEl.appendChild(messageDiv);
+      logEl.scrollTop = logEl.scrollHeight;
+    };
+
+    const updateAudioIndicator = (isActive) => {
+      if (isActive) {
+        audioIndicator.textContent = "🔊";
+        audioIndicator.classList.add("active");
+      } else {
+        audioIndicator.textContent = "🔇";
+        audioIndicator.classList.remove("active");
+      }
+    };
+
+    const connect = async () => {
+      try {
+        updateStatus("Connecting...", "connecting");
+        log("🔄 Connecting to server...", "info");
+
+        const res = await fetch("http://127.0.0.1:5000/api/token?room=test-room");
+        if (!res.ok) {
+          throw new Error(`Token service error: ${res.status}`);
+        }
+
+        const { token } = await res.json();
+        log("✅ Token received", "info");
+
+        room = new Room();
+
+        // Handle connection events
+        room.on(RoomEvent.Connected, () => {
+          isConnected = true;
+          updateStatus("✅ Connected", "connected");
+          log("✅ Connected to LiveKit room", "info");
+          updateAudioIndicator(false);
+        });
+
+        room.on(RoomEvent.Disconnected, () => {
+          isConnected = false;
+          updateStatus("❌ Disconnected", "disconnected");
+          log("❌ Disconnected from room", "info");
+          updateAudioIndicator(false);
+          micEnabled = false;
+          micBtn.textContent = "🎤 Start Listening";
+          micBtn.classList.remove("recording");
+        });
+
+        room.on(RoomEvent.RoomMetadataChanged, (metadata) => {
+          log(`📋 Room metadata: ${metadata}`, "info");
+        });
+
+        // Handle audio track events
+        room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+          if (track.kind === "audio") {
+            log(`🎵 Audio track subscribed from ${participant.identity}`, "info");
+            updateAudioIndicator(true);
+            
+            // Attach audio element for playback
+            const audioElement = track.attach();
+            const trackId = `${participant.identity}-${track.sid}`;
+            audioElements.set(trackId, audioElement);
+            
+            // Try to play if audio is already enabled (user has interacted)
+            if (audioEnabled) {
+              audioElement.play().catch(err => {
+                log(`⚠️ Error playing audio: ${err.message}`, "info");
+              });
+            } else {
+              log("💡 Click 'Start Listening' to enable audio playback", "info");
+            }
+          }
+        });
+
+        room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+          if (track.kind === "audio") {
+            log(`🔇 Audio track unsubscribed from ${participant.identity}`, "info");
+            const trackId = `${participant.identity}-${track.sid}`;
+            audioElements.delete(trackId);
+            track.detach();
+          }
+        });
+
+        // Handle transcriptions
+        room.on("transcriptionReceived", (segments, participant) => {
+          segments.forEach((seg) => {
+            if (seg.isFinal) {
+              const speaker = participant?.identity ?? "agent";
+              const isUser = speaker === room.localParticipant.identity;
+              log(`${isUser ? "👤 You" : "🤖 Assistant"}: ${seg.text}`, isUser ? "user" : "agent");
+            }
+          });
+        });
+
+        // Handle participant events
+        room.on(RoomEvent.ParticipantConnected, (participant) => {
+          log(`👋 ${participant.identity} joined the room`, "info");
+        });
+
+        room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+          log(`👋 ${participant.identity} left the room`, "info");
+        });
+
+        // Handle data messages
+        room.on(RoomEvent.DataReceived, (payload, participant, kind, topic) => {
+          const message = new TextDecoder().decode(payload);
+          log(`📩 Data from ${participant?.identity ?? "unknown"}: ${message}`, "info");
+        });
+
+        // Connect to room
+        await room.connect(
+          "wss://info-bot-qxx0pbnk.livekit.cloud",
+          token
+        );
+
+        log("🎉 Ready! Click 'Start Listening' to begin.", "info");
+
+      } catch (error) {
+        updateStatus(`❌ Error: ${error.message}`, "error");
+        log(`❌ Connection error: ${error.message}`, "info");
+        console.error("Connection error:", error);
+      }
+    };
+
+    // Mic toggle handler
+    micBtn.onclick = async () => {
+      if (!isConnected) {
+        log("⚠️ Not connected. Please wait for connection.", "info");
+        return;
+      }
+
+      // Enable audio playback on first user interaction
+      if (!audioEnabled) {
+        await enableAudioPlayback();
+      }
+
+      try {
+        micEnabled = !micEnabled;
+        await room.localParticipant.setMicrophoneEnabled(micEnabled);
+        
+        if (micEnabled) {
+          micBtn.textContent = "⏸️ Stop Listening";
+          micBtn.classList.add("recording");
+          log("🎤 Microphone enabled - I'm listening...", "user");
+          updateAudioIndicator(true);
+        } else {
+          micBtn.textContent = "🎤 Start Listening";
+          micBtn.classList.remove("recording");
+          log("🔇 Microphone disabled", "user");
+          updateAudioIndicator(false);
+        }
+      } catch (error) {
+        log(`❌ Error toggling microphone: ${error.message}`, "info");
+        console.error("Mic toggle error:", error);
+      }
+    };
+
+    // Disconnect handler
+    disconnectBtn.onclick = async () => {
+      // Enable audio playback on user interaction
+      if (!audioEnabled) {
+        await enableAudioPlayback();
+      }
+
+      if (room && isConnected) {
+        try {
+          await room.disconnect();
+          log("👋 Disconnected from room", "info");
+          audioElements.clear();
+          audioEnabled = false;
+        } catch (error) {
+          log(`❌ Error disconnecting: ${error.message}`, "info");
+          console.error("Disconnect error:", error);
+        }
+      }
+    };
+
+    // Initialize connection
+    connect();
+  </script>
+</body>
+</html>
