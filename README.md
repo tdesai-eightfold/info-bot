@@ -1,7 +1,7 @@
 # Setup
 ## Install dependencies
    
-  `uv add "livekit-agents[silero,turn-detector]~=1.3" "livekit-plugins-noise-cancellation~=0.2" "python-dotenv`
+  `uv add "livekit-agents[silero,turn-detector]~=1.3" "livekit-plugins-noise-cancellation~=0.2" "python-dotenv"`
 
 # Run the server (console mode)
   `uv run server.py console`
