@@ -12,8 +12,6 @@
   4. Open index.html it chrome
 
 # Key Features of voice bot 
-**Short explanation with an HR example (salary access):**
-
 This voice bot uses an `EmployeeField` enum to control **who can see which employee details**.
 Each field (Email, Phone, Address, Role, Salary) is marked as **restricted or not**.
 
